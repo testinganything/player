@@ -3,125 +3,204 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple YouTube Bypass Player</title>
-    <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet" />
+    <title>YouTube Bypass Player</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
-        input { width: 300px; padding: 10px; margin-right: 10px; }
-        button { padding: 10px 20px; background: #ff0000; color: white; border: none; cursor: pointer; }
-        button:hover { background: #cc0000; }
-        #player { width: 100%; height: 400px; margin-top: 20px; }
-        #error { color: red; margin-top: 10px; }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            text-align: center;
+            color: #ff0000;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #cc0000;
+        }
+        #videoContainer {
+            margin-top: 20px;
+            text-align: center;
+        }
+        video {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+        }
+        #title {
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #error {
+            color: red;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>Simple YouTube Age Bypass Player</h1>
-    <p>Enter a YouTube video ID (e.g., dQw4w9WgXcQ):</p>
-    <input type="text" id="videoId" placeholder="Video ID here" />
+    <h1>YouTube Age Restriction Bypass Player</h1>
+    <p>Enter a YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID):</p>
+    <input type="text" id="videoUrl" placeholder="Paste YouTube URL here">
     <button onclick="loadVideo()">Load Video</button>
+    <div id="videoContainer"></div>
     <div id="error"></div>
-    <video id="player" class="video-js vjs-default-skin" controls preload="auto" data-setup="{}">
-        <p class="vjs-no-js">To view this video, enable JavaScript and consider upgrading to a web browser that supports HTML5 video.</p>
-    </video>
 
-    <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
     <script>
-        // Function to get signature timestamp from YouTube's base.js (fallback for proxy requests)
-        async function getSignatureTimestamp() {
+        const ACCOUNT_PROXY_SERVER_HOST = 'https://youtube-proxy.zerody.one';
+        const UNLOCKABLE_PLAYABILITY_STATUSES = ['AGE_VERIFICATION_REQUIRED', 'AGE_CHECK_REQUIRED', 'CONTENT_CHECK_REQUIRED', 'LOGIN_REQUIRED'];
+        const VALID_PLAYABILITY_STATUSES = ['OK', 'LIVE_STREAM_OFFLINE'];
+
+        function parseVideoId(url) {
+            const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        function flattenObject(obj, prefix = '') {
+            return Object.keys(obj).reduce((acc, key) => {
+                const newKey = prefix ? `${prefix}.${key}` : key;
+                const value = obj[key];
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    Object.assign(acc, flattenObject(value, newKey));
+                } else {
+                    acc[newKey] = value;
+                }
+                return acc;
+            }, {});
+        }
+
+        async function getUnlockedPlayerResponse(videoId) {
+            // Use TV Embedded Player strategy payload
+            const signatureTimestamp = Math.floor(Date.now() / 1000);
+            const hl = 'en';
+            const payload = {
+                context: {
+                    client: {
+                        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+                        clientVersion: '2.0',
+                        clientScreen: 'WATCH',
+                        hl: hl,
+                    },
+                    thirdParty: {
+                        embedUrl: 'https://www.youtube.com/',
+                    },
+                },
+                playbackContext: {
+                    contentPlaybackContext: {
+                        signatureTimestamp: signatureTimestamp,
+                    },
+                },
+                videoId: videoId,
+                startTimeSecs: 0,
+                racyCheckOk: true,
+                contentCheckOk: true,
+            };
+
+            const flatPayload = flattenObject(payload);
+            const params = new URLSearchParams(flatPayload);
+            const proxyUrl = `${ACCOUNT_PROXY_SERVER_HOST}/getPlayer?${params}&client=js`;
+
             try {
-                const response = await fetch('https://www.youtube.com/s/player/2f0b1a0f/player_ias.vflset/en_US/base.js'); // Use a recent player ID; update if needed
-                const text = await response.text();
-                const match = text.match(/signatureTimestamp:(\d+)/);
-                return match ? parseInt(match[1]) : 17280; // Fallback default
-            } catch (e) {
-                console.error('Failed to get timestamp:', e);
-                return 17280; // Default fallback
+                const response = await fetch(proxyUrl);
+                if (!response.ok) {
+                    throw new Error('Proxy request failed');
+                }
+                const data = await response.json();
+                const status = data.playabilityStatus?.status;
+                if (VALID_PLAYABILITY_STATUSES.includes(status)) {
+                    return data;
+                } else if (UNLOCKABLE_PLAYABILITY_STATUSES.includes(status)) {
+                    throw new Error('Age restriction not bypassed');
+                } else {
+                    throw new Error(`Invalid playability status: ${status}`);
+                }
+            } catch (err) {
+                console.error('Error fetching player response:', err);
+                throw err;
             }
         }
 
-        // Function to load and play video
-        async function loadVideo() {
-            const videoId = document.getElementById('videoId').value.trim();
-            const errorDiv = document.getElementById('error');
-            const playerEl = document.getElementById('player');
-            errorDiv.textContent = '';
+        function findBestFormat(streamingData) {
+            // Prefer progressive MP4 formats: itag 22 (720p), 18 (360p)
+            const preferredItags = [22, 18];
+            for (const itag of preferredItags) {
+                const format = streamingData.formats.find(f => f.itag === itag);
+                if (format && format.url) {
+                    return format;
+                }
+            }
+            // Fallback to first available format
+            const format = streamingData.formats.find(f => f.url);
+            if (format) return format;
+            return null;
+        }
 
+        async function loadVideo() {
+            const urlInput = document.getElementById('videoUrl').value.trim();
+            const videoId = parseVideoId(urlInput);
             if (!videoId) {
-                errorDiv.textContent = 'Please enter a video ID.';
+                document.getElementById('error').textContent = 'Invalid YouTube URL';
                 return;
             }
 
+            const errorDiv = document.getElementById('error');
+            const container = document.getElementById('videoContainer');
+            errorDiv.textContent = '';
+            container.innerHTML = '<p>Loading...</p>';
+
             try {
-                // Get timestamp
-                const signatureTimestamp = await getSignatureTimestamp();
-
-                // Construct proxy URL for unlocked player response
-                const proxyUrl = `https://youtube-proxy.zerody.one/getPlayer?` +
-                    `videoId=${encodeURIComponent(videoId)}&` +
-                    `reason=LOGIN_REQUIRED&` +
-                    `clientName=WEB&` +
-                    `clientVersion=2.20250921.01.00&` +  // Updated for 2025; adjust if proxy rejects
-                    `signatureTimestamp=${signatureTimestamp}&` +
-                    `startTimeSecs=0&` +
-                    `hl=en&` +
-                    `userInterfaceTheme=USER_INTERFACE_THEME_LIGHT&` +
-                    `isEmbed=0&` +
-                    `isConfirmed=0&` +
-                    `client=js`;
-
-                // Fetch unlocked player response
-                const response = await fetch(proxyUrl);
-                const data = await response.json();
-
-                if (data.playabilityStatus?.status !== 'OK') {
-                    throw new Error(data.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.subreason?.runs?.[0]?.text || 'Video not playable (may be restricted or error).');
+                const playerResponse = await getUnlockedPlayerResponse(videoId);
+                const streamingData = playerResponse.streamingData;
+                const videoDetails = playerResponse.videoDetails;
+                if (!streamingData || !videoDetails) {
+                    throw new Error('No streaming data available');
                 }
 
-                // Extract direct video URL (prefer highest quality without signature; e.g., itag 18 for 360p MP4)
-                const formats = data.streamingData?.formats || [];
-                const adaptiveFormats = data.streamingData?.adaptiveFormats || [];
-                const allFormats = [...formats, ...adaptiveFormats];
-
-                let bestUrl = null;
-                let bestQuality = 0;
-                for (const format of allFormats) {
-                    if (format.url && !format.signatureCipher && format.itag === 18) {  // itag 18: 360p MP4, often direct
-                        bestUrl = format.url;
-                        bestQuality = 360;
-                        break;  // Use first match for simplicity
-                    }
+                const format = findBestFormat(streamingData);
+                if (!format) {
+                    throw new Error('No playable format found');
                 }
 
-                if (!bestUrl) {
-                    // Fallback to any direct URL
-                    for (const format of allFormats) {
-                        if (format.url && !format.signatureCipher) {
-                            bestUrl = format.url;
-                            break;
-                        }
-                    }
-                }
+                // Create video element
+                const video = document.createElement('video');
+                video.controls = true;
+                video.src = format.url;
+                video.type = format.mimeType;
 
-                if (!bestUrl) {
-                    throw new Error('No direct stream URL found (may need signature decipher for this video).');
-                }
+                const title = document.createElement('div');
+                title.id = 'title';
+                title.textContent = videoDetails.title;
 
-                // Load into Video.js player
-                const player = videojs('player', { fluid: true });
-                player.src({ src: bestUrl, type: 'video/mp4' });
-                player.ready(() => {
-                    player.play();
-                });
-
-            } catch (error) {
-                console.error(error);
-                errorDiv.textContent = `Error: ${error.message}`;
-                videojs('player').pause();  // Reset player
+                container.innerHTML = '';
+                container.appendChild(title);
+                container.appendChild(video);
+                video.play();
+            } catch (err) {
+                container.innerHTML = '';
+                errorDiv.textContent = `Error: ${err.message}`;
             }
         }
 
-        // Optional: Load video on Enter key
-        document.getElementById('videoId').addEventListener('keypress', (e) => {
+        // Allow Enter key to load
+        document.getElementById('videoUrl').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') loadVideo();
         });
     </script>
