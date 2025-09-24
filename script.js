@@ -1,9 +1,9 @@
-navigator.serviceWorker.register('/service-worker.js');
+navigator.serviceWorker.register('./service-worker.js');
 
 let ytcfg;
 
 async function init() {
-  const html = await (await fetch('/proxy/https://www.youtube.com')).text();
+  const html = await (await fetch('./proxy/https://www.youtube.com')).text();
   const match = html.match(/ytcfg\.set\((.*?)\)/s);
   if (match) {
     ytcfg = JSON.parse(match[1]);
@@ -15,7 +15,7 @@ init();
 
 async function searchVideos() {
   const query = document.getElementById('search-input').value;
-  const url = `/proxy/https://www.youtube.com/youtubei/v1/search?key=${ytcfg.INNERTUBE_API_KEY}`;
+  const url = `./proxy/https://www.youtube.com/youtubei/v1/search?key=${ytcfg.INNERTUBE_API_KEY}`;
   const body = {
     context: ytcfg.INNERTUBE_CONTEXT,
     query
@@ -77,7 +77,7 @@ async function getUnlockedPlayerResponse(videoId) {
   ];
   for (let strategy of strategies) {
     let payload = strategy.payload;
-    let url = strategy.endpoint === 'proxy' ? `https://youtube-proxy.zerody.one/get_player?video_id=${payload.videoId}&reason=${payload.reason}&clientName=${payload.clientName}&clientVersion=${payload.clientVersion}&signatureTimestamp=${payload.signatureTimestamp}&hl=${payload.hl}` : '/proxy/https://www.youtube.com/youtubei/v1/player';
+    let url = strategy.endpoint === 'proxy' ? `https://youtube-proxy.zerody.one/get_player?video_id=${payload.videoId}&reason=${payload.reason}&clientName=${payload.clientName}&clientVersion=${payload.clientVersion}&signatureTimestamp=${payload.signatureTimestamp}&hl=${payload.hl}` : './proxy/https://www.youtube.com/youtubei/v1/player';
     const res = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
     const data = await res.json();
     if (data.playabilityStatus?.status === 'OK') {
@@ -88,28 +88,28 @@ async function getUnlockedPlayerResponse(videoId) {
 }
 
 async function getPlayer(payload) {
-  const url = '/proxy/https://www.youtube.com/youtubei/v1/player';
+  const url = './proxy/https://www.youtube.com/youtubei/v1/player';
   const res = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
   return await res.json();
 }
 
 async function getSignatureTimestamp(videoId) {
-  const embedHtml = await (await fetch(`/proxy/https://www.youtube.com/embed/${videoId}`)).text();
+  const embedHtml = await (await fetch(`./proxy/https://www.youtube.com/embed/${videoId}`)).text();
   const match = embedHtml.match(/\/s\/player\/(\w+)\/player_ias.vflset\/en_US\/base.js/);
   if (!match) throw new Error('Could not find player URL');
   const playerUrl = `https://www.youtube.com/s/player/${match[1]}/player_ias.vflset/en_US/base.js`;
-  const playerJs = await (await fetch(`/proxy/${playerUrl}`)).text();
+  const playerJs = await (await fetch(`./proxy/${playerUrl}`)).text();
   const stsMatch = playerJs.match(/signatureTimestamp:(\d+)/);
   if (!stsMatch) throw new Error('Could not find signatureTimestamp');
   return stsMatch[1];
 }
 
 async function decodeSignature(videoId, signatureCipher, baseUrl, sp) {
-  const embedHtml = await (await fetch(`/proxy/https://www.youtube.com/embed/${videoId}`)).text();
+  const embedHtml = await (await fetch(`./proxy/https://www.youtube.com/embed/${videoId}`)).text();
   const match = embedHtml.match(/\/s\/player\/(\w+)\/player_ias.vflset\/en_US\/base.js/);
   if (!match) throw new Error('Could not find player URL');
   const playerUrl = `https://www.youtube.com/s/player/${match[1]}/player_ias.vflset/en_US/base.js`;
-  const playerJs = await (await fetch(`/proxy/${playerUrl}`)).text();
+  const playerJs = await (await fetch(`./proxy/${playerUrl}`)).text();
   const funcMatch = playerJs.match(/([a-zA-Z0-9$_]{1,3})=function\(a\)\{a=a\.split\(""\);(.*?)return a\.join\(""\)}/s);
   if (!funcMatch) throw new Error('Could not find decoder function');
   const funcBody = funcMatch[2];
