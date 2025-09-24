@@ -1,0 +1,8 @@
+body { font-family: Arial; margin: 20px; }
+#search-input { width: 300px; padding: 10px; }
+button { padding: 10px; }
+#results { display: flex; flex-wrap: wrap; margin-top: 20px; }
+.card { width: 200px; margin: 10px; cursor: pointer; border: 1px solid #ddd; padding: 10px; }
+.card img { width: 100%; }
+.card p { margin: 5px 0; }
+#player { width: 640px; height: 360px; display: none; margin-top: 20px; }
