@@ -1,14 +1,360 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Custom YouTube with Bypass</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0c;
+      --surface:  #111116;
+      --border:   #1e1e28;
+      --border2:  #2a2a38;
+      --text:     #e8e8f0;
+      --muted:    #5a5a78;
+      --accent:   #ff2d55;
+      --accent2:  #ff6b35;
+      --glow:     rgba(255,45,85,.18);
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; }
+
+    body { display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; opacity: .5;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 1;
+      background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);
+      pointer-events: none;
+    }
+
+    .page { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 48px 24px 64px; gap: 40px; flex: 1; }
+
+    header { text-align: center; }
+
+    .wordmark {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: -.03em;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 24px var(--glow));
+    }
+
+    .tagline { margin-top: 6px; font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--muted); }
+
+    .search-wrap { width: 100%; max-width: 700px; }
+
+    .search-bar {
+      display: flex;
+      border: 1.5px solid var(--border2);
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--surface);
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+
+    #urlInput {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'DM Mono', monospace;
+      font-size: .88rem; padding: 14px 18px; min-width: 0;
+    }
+
+    #urlInput::placeholder { color: var(--muted); }
+
+    #playBtn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; cursor: pointer; padding: 0 24px; color: #fff;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: .9rem;
+      letter-spacing: .04em; display: flex; align-items: center; gap: 8px;
+      transition: opacity .15s, filter .15s; white-space: nowrap;
+    }
+
+    #playBtn:hover { filter: brightness(1.12); }
+    #playBtn:active { opacity: .85; }
+
+    .play-icon { width: 14px; height: 14px; fill: #fff; }
+
+    .hints { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+    .chip {
+      font-size: .68rem; letter-spacing: .06em; padding: 4px 10px;
+      border-radius: 3px; border: 1px solid var(--border2); color: var(--muted);
+      cursor: pointer; transition: border-color .15s, color .15s; user-select: none;
+    }
+
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    #errorMsg {
+      display: none; background: rgba(255,45,85,.12); border: 1px solid rgba(255,45,85,.35);
+      color: var(--accent); border-radius: 6px; padding: 10px 16px;
+      font-size: .8rem; margin-top: 10px; letter-spacing: .03em;
+    }
+
+    #playerWrap {
+      width: 100%; max-width: 900px; display: none;
+      flex-direction: column; gap: 12px;
+      animation: fadeUp .4s ease both;
+    }
+
+    @keyframes fadeUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform: translateY(0); } }
+
+    .player-shell {
+      width: 100%; aspect-ratio: 16/9;
+      border: 1.5px solid var(--border2); border-radius: 8px;
+      overflow: hidden; background: #000;
+      box-shadow: 0 4px 48px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.03);
+    }
+
+    #playerFrame { width: 100%; height: 100%; border: none; display: block; }
+
+    .player-meta { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
+
+    #nowPlaying { font-size: .75rem; color: var(--muted); letter-spacing: .06em; }
+    #nowPlaying span { color: var(--text); }
+
+    .open-yt {
+      font-size: .72rem; color: var(--muted); text-decoration: none;
+      letter-spacing: .06em; border: 1px solid var(--border2);
+      padding: 4px 10px; border-radius: 3px;
+      transition: border-color .15s, color .15s;
+    }
+
+    .open-yt:hover { border-color: var(--accent); color: var(--accent); }
+
+    .age-notice {
+      background: rgba(255,107,53,.07); border: 1px solid rgba(255,107,53,.25);
+      border-radius: 6px; padding: 12px 16px; font-size: .76rem;
+      color: #c0805a; line-height: 1.6; letter-spacing: .02em;
+    }
+
+    .age-notice strong { color: var(--accent2); }
+
+    footer { position: relative; z-index: 2; text-align: center; padding: 24px; font-size: .68rem; letter-spacing: .08em; color: var(--muted); border-top: 1px solid var(--border); }
+
+    .bg-orb { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; filter: blur(100px); opacity: .07; }
+    .orb1 { width: 500px; height: 500px; background: var(--accent); top:-120px; left:-120px; }
+    .orb2 { width: 400px; height: 400px; background: var(--accent2); bottom:-100px; right:-100px; }
+
+    @media (max-width: 540px) {
+      .page { padding: 32px 16px 48px; gap: 28px; }
+      #playBtn { padding: 0 16px; font-size: .82rem; }
+      #urlInput { font-size: .82rem; padding: 12px 14px; }
+    }
+  </style>
 </head>
 <body>
-  <input id="search-input" type="text" placeholder="Search videos">
-  <button onclick="searchVideos()">Search</button>
-  <div id="results"></div>
-  <video id="player" controls></video>
-  <script src="script.js"></script>
+
+<div class="bg-orb orb1"></div>
+<div class="bg-orb orb2"></div>
+
+<div class="page">
+
+  <header>
+    <div class="wordmark">YT_PLAYER</div>
+    <div class="tagline">Paste any YouTube link &middot; Hit play</div>
+  </header>
+
+  <div class="search-wrap">
+    <div class="search-bar">
+      <input
+        id="urlInput"
+        type="text"
+        placeholder="youtube.com/watch?v=… or youtu.be/… or /shorts/…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="playBtn" onclick="loadVideo()">
+        <svg class="play-icon" viewBox="0 0 16 16"><path d="M3 2.5l11 5.5-11 5.5V2.5z"/></svg>
+        PLAY
+      </button>
+    </div>
+
+    <div class="hints">
+      <span class="chip" onclick="fillExample('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">watch?v=</span>
+      <span class="chip" onclick="fillExample('https://youtu.be/dQw4w9WgXcQ')">youtu.be/</span>
+      <span class="chip" onclick="fillExample('https://www.youtube.com/shorts/dQw4w9WgXcQ')">shorts/</span>
+      <span class="chip" onclick="fillExample('https://www.youtube.com/live/dQw4w9WgXcQ')">live/</span>
+      <span class="chip" onclick="fillExample('https://www.youtube.com/playlist?list=PLbpi6ZahtOH6Ar_3GPy3workRraRtbBf0')">playlist</span>
+      <span class="chip" onclick="fillExample('dQw4w9WgXcQ')">video ID</span>
+    </div>
+
+    <div id="errorMsg"></div>
+  </div>
+
+  <div id="playerWrap">
+    <div class="player-shell">
+      <iframe
+        id="playerFrame"
+        src=""
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"
+      ></iframe>
+    </div>
+
+    <div class="player-meta">
+      <div id="nowPlaying">NOW PLAYING &mdash; <span id="videoIdDisplay"></span></div>
+      <a id="openYT" class="open-yt" href="#" target="_blank" rel="noopener">&#x2197; OPEN IN YOUTUBE</a>
+    </div>
+
+    <div class="age-notice">
+      <strong>Age-restricted video?</strong> This player uses YouTube's official embed, which shares your browser's YouTube session.
+      If a video requires age verification, simply <strong>log in to YouTube.com</strong> in another tab first &mdash; the embed will then play it automatically.
+    </div>
+  </div>
+
+</div>
+
+<footer>YT_PLAYER &mdash; single HTML file &middot; host free on GitHub Pages or Netlify</footer>
+
+<script>
+  function parseYouTubeInput(raw) {
+    raw = (raw || '').trim();
+    if (!raw) return null;
+
+    let url;
+    try {
+      const withProto = raw.startsWith('http') ? raw : 'https://' + raw;
+      url = new URL(withProto);
+    } catch (_) {
+      if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return { type: 'video', id: raw };
+      return null;
+    }
+
+    const host = url.hostname.replace(/^(www\.|m\.)/, '');
+    const path = url.pathname;
+
+    if (host === 'youtu.be') {
+      const id = path.slice(1).split('/')[0].split('?')[0];
+      if (isValidId(id)) return { type: 'video', id, start: parseStart(url) };
+    }
+
+    if (host !== 'youtube.com' && host !== 'youtube-nocookie.com') return null;
+
+    if (path === '/watch') {
+      const v = url.searchParams.get('v');
+      const list = url.searchParams.get('list');
+      if (list) return { type: 'playlist', id: list, videoId: v || null, start: parseStart(url) };
+      if (isValidId(v)) return { type: 'video', id: v, start: parseStart(url) };
+    }
+
+    const shortsMatch = path.match(/^\/shorts\/([A-Za-z0-9_-]{11})/);
+    if (shortsMatch) return { type: 'video', id: shortsMatch[1], start: parseStart(url) };
+
+    const liveMatch = path.match(/^\/live\/([A-Za-z0-9_-]{11})/);
+    if (liveMatch) return { type: 'video', id: liveMatch[1] };
+
+    const embedMatch = path.match(/^\/embed\/([A-Za-z0-9_-]{11})/);
+    if (embedMatch) return { type: 'video', id: embedMatch[1], start: parseStart(url) };
+
+    const vMatch = path.match(/^\/v\/([A-Za-z0-9_-]{11})/);
+    if (vMatch) return { type: 'video', id: vMatch[1] };
+
+    const eMatch = path.match(/^\/e\/([A-Za-z0-9_-]{11})/);
+    if (eMatch) return { type: 'video', id: eMatch[1] };
+
+    if (path === '/playlist') {
+      const list = url.searchParams.get('list');
+      if (list) return { type: 'playlist', id: list };
+    }
+
+    if (/^\/(user|c|channel|\@)/.test(path)) {
+      return { type: 'unsupported', reason: 'Channel pages cannot be embedded — paste a specific video link.' };
+    }
+
+    return null;
+  }
+
+  function isValidId(id) { return id && /^[A-Za-z0-9_-]{11}$/.test(id); }
+
+  function parseStart(url) {
+    const t = url.searchParams.get('t') || url.searchParams.get('start');
+    if (!t) return 0;
+    if (/^\d+$/.test(t)) return parseInt(t, 10);
+    let s = 0;
+    const h = t.match(/(\d+)h/); if (h) s += parseInt(h[1]) * 3600;
+    const m = t.match(/(\d+)m/); if (m) s += parseInt(m[1]) * 60;
+    const sec = t.match(/(\d+)s/); if (sec) s += parseInt(sec[1]);
+    return s;
+  }
+
+  function buildEmbedUrl(parsed) {
+    const params = new URLSearchParams({ autoplay: '1', rel: '0', modestbranding: '1' });
+    if (parsed.type === 'playlist') {
+      params.set('listType', 'playlist');
+      params.set('list', parsed.id);
+      if (parsed.videoId) return 'https://www.youtube-nocookie.com/embed/' + parsed.videoId + '?' + params;
+      return 'https://www.youtube-nocookie.com/embed/videoseries?' + params;
+    }
+    if (parsed.start) params.set('start', parsed.start);
+    return 'https://www.youtube-nocookie.com/embed/' + parsed.id + '?' + params;
+  }
+
+  function loadVideo() {
+    const raw = document.getElementById('urlInput').value;
+    const errEl = document.getElementById('errorMsg');
+    errEl.style.display = 'none';
+
+    const parsed = parseYouTubeInput(raw);
+    if (!parsed) { showError("Couldn't recognise that URL. Try a youtube.com/watch?v=… or youtu.be/… link."); return; }
+    if (parsed.type === 'unsupported') { showError(parsed.reason); return; }
+
+    const embedUrl = buildEmbedUrl(parsed);
+    const ytUrl = parsed.type === 'playlist'
+      ? 'https://www.youtube.com/playlist?list=' + parsed.id
+      : 'https://www.youtube.com/watch?v=' + parsed.id + (parsed.start ? '&t=' + parsed.start : '');
+
+    document.getElementById('playerFrame').src = embedUrl;
+    document.getElementById('videoIdDisplay').textContent = parsed.type === 'playlist' ? 'PLAYLIST — ' + parsed.id : parsed.id;
+    document.getElementById('openYT').href = ytUrl;
+
+    const wrap = document.getElementById('playerWrap');
+    wrap.style.display = 'flex';
+    wrap.style.animation = 'none';
+    wrap.offsetHeight;
+    wrap.style.animation = '';
+
+    setTimeout(function() { wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 50);
+  }
+
+  function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+  }
+
+  function fillExample(url) {
+    document.getElementById('urlInput').value = url;
+    document.getElementById('urlInput').focus();
+  }
+
+  document.getElementById('urlInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loadVideo();
+  });
+
+  window.addEventListener('DOMContentLoaded', function() {
+    var params = new URLSearchParams(window.location.search);
+    var preload = params.get('url') || params.get('v');
+    if (preload) { document.getElementById('urlInput').value = preload; loadVideo(); }
+  });
+</script>
 </body>
 </html>
